@@ -108,52 +108,6 @@ class PydocblockCommand(sublime_plugin.TextCommand):
         print('Is there any end to these arguments?')
         return None
 
-    def log_str(self, var_name):
-        ws = self.leading_whitespace()
-        trimmed = self.trim_quoted_output(var_name)
-        print(var_name)
-        print(trimmed)
-        if self.in_python():
-            return ("{0}logger.debug('{1}: ' + str({2}))").format(ws,
-                trimmed, var_name)
-
-        if self.in_js():
-            return (
-                "{0}console.log('{1}:', {2});").format(ws, trimmed,
-                var_name)
-
-        if self.in_coffee():
-            return (
-                "{0}console.log '{1}:', {2}").format(ws, trimmed, var_name)
-
-        if self.in_php():
-            return (
-                '{0}print("\\n-----\\n" . \'{1}:\'); ' +
-                'var_dump({2}); ' +
-                'print("\\n-----\\n"); ' +
-                "ob_flush();").format(ws, trimmed, var_name)
-
-    def trim_quoted_output(self, output):
-        return re.sub(r'\'|\"', '', output)
-
-    def insert_with_newline(self, edit, text):
-        view = self.active_view()
-        eol = view.line(view.sel()[0]).end()
-        self.view.insert(edit, eol, "\n{}".format(text))
-
-    def get_cursor_word(self):
-        view = self.active_view()
-        word = view.substr(view.sel()[0]).strip()
-        if len(word) == 0:
-            return None
-        return word
-
-    def leading_whitespace(self):
-        view = self.active_view()
-        line = view.substr(view.line(view.sel()[0]))
-        matches = re.findall(r'(\s*)\S+', line)
-        return matches[0]
-
     def in_python(self):
         return 'python' in self.current_scope()
 
