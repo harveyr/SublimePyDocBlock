@@ -1,38 +1,111 @@
-# http://www.sublimetext.com/docs/commands
-# http://www.sublimetext.com/docs/2/api_reference.html
-
-import sublime, sublime_plugin
+import sublime
+import sublime_plugin
 import re
 
 
-class PydocblockCommand(sublime_plugin.TextCommand):
-    start_region = None
-    end_region = None
+DOCSTRING_SELECTOR = 'string.quoted.double.block.python'
+COMMENT_SELECTOR = 'comment.line.number-sign.python'
 
+COMMENT_REX = re.compile(r'^(\s*)(#|##)', re.MULTILINE)
+
+LINE_LENGTH = 79
+
+class BaseCommand(sublime_plugin.TextCommand):
+    @property
+    def sel_start(self):
+        return self.view.sel()[0].a
+
+    @property
+    def current_scope(self):
+        return self.view.scope_name(self.sel_start)
+
+    @property
+    def in_docstring(self):
+        return DOCSTRING_SELECTOR in self.current_scope
+
+    @property
+    def in_comment(self):
+        return (
+            COMMENT_SELECTOR in self.current_scope or
+            COMMENT_REX.match(self.view.substr(self.view.line(self.sel_start)))
+        )
+
+        # adf as dfa sdfa sdfa f f asdf asd fasd dfs asd f asdf asdf asdf sdaf
+        # asd fa sdf asdf asdf a sdf asdf asdf asd fas dfa sdf asdf
+
+
+class ReformatPyCommentCommand(BaseCommand):
     def run(self, edit):
-        self.start_region = self.find_start_region()
-        if self.start_region is None:
-            print('No start region found')
-            return
+        if self.in_docstring:
+            replace_region, replace_str = self.reformat_docstring()
+        elif self.in_comment:
+            replace_region, replace_str = self.reformat_comment()
+        else:
+            raise RuntimeError(
+                'Inoperable scope: {}'.format(self.current_scope)
+            )
+        self.view.replace(edit, replace_region, replace_str)
 
-        self.end_region = self.find_end_region()
-        if self.end_region is None:
-            print('No end region found.')
+    def reformat_docstring(self):
+        region = self.full_region_by_selector(DOCSTRING_SELECTOR)
 
-        self.extract_args()
+    def reformat_comment(self):
+        if self.view.sel()[0].size():
+            region = self.view.sel()[0]
+        else:
+            region = self.full_comment_region()
+        leading_whitespace = COMMENT_REX.search(
+            self.view.substr(self.view.lines(region)[0])
+        ).group(1)
 
-        self.insert_docblock(edit)
+        lines = COMMENT_REX.sub('', self.view.substr(region)).splitlines()
+        joined = ' '.join([l.strip() for l in lines if l.strip()])
 
-        # text = ' '.join(text.split('\n'))
-        # print(text)
-        # args_string = re.findall(r'\((.*)\)', text)
-        # args = [arg.trim() for arg in args_matches]
+        line_start = ''.join([leading_whitespace, '#'])
+        buf = line_start
+        for word in [w for w in joined.split(' ') if w]:
+            current_line = buf.splitlines()[-1]
+            if len(current_line) + len(word) + 1 <= LINE_LENGTH:
+                buf += ''.join([' ', word])
+            else:
+                buf += ''.join(['\n', line_start, ' ', word])
 
-    def test_case(
-        arg1,
-        arg2,
-        arg3):
-        pass
+        return region, buf
+
+    def next_line(self, region, direction):
+        if direction == 'backward':
+            return self.view.line(region.begin() - 1)
+        elif direction == 'forward':
+            return self.view.line(region.end() + 1)
+        else:
+            raise RuntimeError('Unexpected direction: {}'.format(direction))
+
+    def expanded_region_by_rex(self, region, rex, direction):
+        expanded_region = sublime.Region(region.a, region.b)
+        next_line = self.next_line(expanded_region, direction)
+        while rex.match(self.view.substr(next_line)):
+            expanded_region = expanded_region.cover(next_line)
+            next_line = self.next_line(expanded_region, direction)
+
+        return expanded_region
+
+    def full_comment_region(self):
+        region = self.view.line(self.sel_start)
+        for direction in ['forward', 'backward']:
+            region = self.expanded_region_by_rex(
+                region, COMMENT_REX, direction
+            )
+
+        return region
+
+    def full_region_by_selector(self, selector):
+        cursor = self.sel_start
+        regions = self.view.find_by_selector(selector)
+        for region in regions:
+            if region.contains(cursor):
+                return region
+        return None
+
 
     def insert_docblock(self, edit):
         """
@@ -107,22 +180,3 @@ class PydocblockCommand(sublime_plugin.TextCommand):
 
         print('Is there any end to these arguments?')
         return None
-
-    def in_python(self):
-        return 'python' in self.current_scope()
-
-    def in_php(self):
-        return 'source.php' in self.current_scope()
-
-    def in_js(self):
-        return 'source.js' in self.current_scope()
-
-    def in_coffee(self):
-        return 'source.coffee' in self.current_scope()
-
-    def current_scope(self):
-        print(self.active_view().scope_name(0))
-        return self.active_view().scope_name(0)
-
-    def active_view(self):
-        return sublime.active_window().active_view()

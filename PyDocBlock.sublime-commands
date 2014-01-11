@@ -1,6 +1,6 @@
 [
     {
-        "caption": "PyDocBlock: Generate",
-        "command": "pydocblock"
+        "caption": "PyDocBlock: Reformat",
+        "command": "reformat_py_comment"
     }
 ]
