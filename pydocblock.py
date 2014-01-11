@@ -1,14 +1,18 @@
+import re
+import textwrap
+
 import sublime
 import sublime_plugin
-import re
 
 
 DOCSTRING_SELECTOR = 'string.quoted.double.block.python'
 COMMENT_SELECTOR = 'comment.line.number-sign.python'
 
 COMMENT_REX = re.compile(r'^(\s*)(#|##)', re.MULTILINE)
+DOCSTRING_START_REX = re.compile(r'^(\s*)"""|\'\'\'', re.MULTILINE)
 
 LINE_LENGTH = 79
+
 
 class BaseCommand(sublime_plugin.TextCommand):
     @property
@@ -30,9 +34,6 @@ class BaseCommand(sublime_plugin.TextCommand):
             COMMENT_REX.match(self.view.substr(self.view.line(self.sel_start)))
         )
 
-        # adf as dfa sdfa sdfa f f asdf asd fasd dfs asd f asdf asdf asdf sdaf
-        # asd fa sdf asdf asdf a sdf asdf asdf asd fas dfa sdf asdf
-
 
 class ReformatPyCommentCommand(BaseCommand):
     def run(self, edit):
@@ -46,8 +47,49 @@ class ReformatPyCommentCommand(BaseCommand):
             )
         self.view.replace(edit, replace_region, replace_str)
 
+    def paragraphs(self, source):
+        paragraphs = [[]]
+        for line in source.splitlines():
+            line_words = [w for w in line.split(' ') if w]
+            if not line_words:
+                if paragraphs[-1]:
+                    paragraphs += [[], []]
+            else:
+                paragraphs[-1] += line_words
+
+        return paragraphs
+
     def reformat_docstring(self):
-        region = self.full_region_by_selector(DOCSTRING_SELECTOR)
+        """Reformats doctring.
+
+        Here is some more text that will help me test stuff because testing stuff is important and stuff.
+
+        And here's another paragraph."""
+        region = self.full_docstring_region()
+        source = self.view.substr(region)
+        leading_whitespace = re.search(r'^\s+', source).group(0)
+        paragraph_width = LINE_LENGTH - len(leading_whitespace)
+
+        paragraphs = self.paragraphs(re.sub(r'"""|\'\'\'', '', source))
+        paragraphs[0][0] = '"""' + paragraphs[0][0]
+        if len(paragraphs) == 1:
+            paragraphs[0][-1] += '"""'
+        else:
+            paragraphs += [[], ['"""']]
+
+        buf = ''
+        for para in paragraphs:
+            print('para: {0}'.format(para))
+            if not para:
+                buf += '\n\n'
+            else:
+                lines = textwrap.wrap(' '.join(para), width=paragraph_width)
+                buf += '\n'.join(
+                    [leading_whitespace + l for l in lines]
+                )
+        print('buf: {0}'.format(buf))
+
+        return region, buf
 
     def reformat_comment(self):
         if self.view.sel()[0].size():
@@ -89,14 +131,25 @@ class ReformatPyCommentCommand(BaseCommand):
 
         return expanded_region
 
-    def full_comment_region(self):
+    def expand_cursor_region(self, rex):
         region = self.view.line(self.sel_start)
         for direction in ['forward', 'backward']:
             region = self.expanded_region_by_rex(
-                region, COMMENT_REX, direction
+                region, rex, direction
             )
 
         return region
+
+    def full_comment_region(self):
+        return self.expand_cursor_region(COMMENT_REX)
+
+    def full_docstring_region(self):
+        region = self.full_region_by_selector(DOCSTRING_SELECTOR)
+        print('region: {0}'.format(region))
+        lines = self.view.lines(region)
+        print('lines: {0}'.format(lines))
+
+        return region.cover(self.view.line(lines[0].begin()))
 
     def full_region_by_selector(self, selector):
         cursor = self.sel_start
@@ -107,6 +160,8 @@ class ReformatPyCommentCommand(BaseCommand):
         return None
 
 
+class NotUsed(object):
+
     def insert_docblock(self, edit):
         """
         DESCRIPTION
@@ -114,8 +169,6 @@ class ReformatPyCommentCommand(BaseCommand):
         :param edit: [edit Description]
         :type edit: [edit Type]
         """
-
-
         def indented (text): return "{}{}".format(self.leading_whitespace, text)
         buffer = '\n'
         buffer += indented('"""\n')
@@ -133,14 +186,12 @@ class ReformatPyCommentCommand(BaseCommand):
         eol = view.line(self.end_region).end()
         self.view.insert(edit, eol, buffer)
 
-
     def extract_args(self):
         view = self.active_view()
         text = view.substr(self.start_region.cover(self.end_region))
         self.args = [arg.strip() for arg in re.split(r'\(|,|\)|:', text)[1:] \
             if arg.strip() != '' and arg.strip() != 'self']
         print(self.args)
-
 
     def find_start_region(self):
         view = self.active_view()
