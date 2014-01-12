@@ -51,23 +51,24 @@ class ReformatPyCommentCommand(BaseCommand):
         paragraphs = [[]]
         for line in source.splitlines():
             line_words = [w for w in line.split(' ') if w]
-            if not line_words:
-                if paragraphs[-1]:
-                    paragraphs += [[], []]
+            if not line_words and paragraphs[-1]:
+                paragraphs += [[]]
             else:
                 paragraphs[-1] += line_words
 
         return paragraphs
 
     def reformat_docstring(self):
-        """Reformats doctring.
+        """
+
+        Reformats doctring.
+    
+        This docstring doesn't look so good.
 
         Here is some more text that will help me test stuff because testing stuff is important and stuff.
 
-        And here's another paragraph.asdf asd fa sdf asdf asd fas dfas dfsa df
-        asf asdf
-
-        """
+        And here's another paragraph asdf asd fa sdf asdf asd fas dfas dfsa df
+        asf asdf pineapple"""
         if self.view.sel()[0].size():
             region = self.view.sel()[0]
         else:
@@ -80,21 +81,19 @@ class ReformatPyCommentCommand(BaseCommand):
         paragraphs = self.paragraphs(re.sub(r'"""|\'\'\'', '', source))
         while not paragraphs[-1]:
             paragraphs.pop(-1)
-        paragraphs += [[], ['"""']]
+        paragraphs += [['"""']]
 
         buf = ''
         for idx, para in enumerate(paragraphs):
-            if not para:
-                buf += '\n\n'
-            else:
-                buf += textwrap.fill(
-                    ' '.join(para),
-                    width=LINE_LENGTH,
-                    initial_indent=first_line if idx == 0 else whitespace,
-                    subsequent_indent=whitespace
-                )
+            para_text = textwrap.fill(
+                ' '.join(para),
+                width=LINE_LENGTH,
+                initial_indent=first_line if idx == 0 else whitespace,
+                subsequent_indent=whitespace
+            )
+            buf += '\n'.join([para_text, '\n'])
 
-        return region, buf
+        return region, buf.rstrip()
 
     def reformat_comment(self):
         if self.view.sel()[0].size():
