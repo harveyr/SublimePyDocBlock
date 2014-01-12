@@ -62,38 +62,36 @@ class ReformatPyCommentCommand(BaseCommand):
     def reformat_docstring(self):
         """Reformats doctring.
 
-        Here is some more text that will help me test stuff because testing
-        stuff is important and stuff.
+        Here is some more text that will help me test stuff because testing stuff is important and stuff.
 
-        And here's another paragraph.
-
-
-
-
+        And here's another paragraph.asdf asd fa sdf asdf asd fas dfas dfsa df
+        asf asdf
 
         """
-        region = self.full_docstring_region()
+        if self.view.sel()[0].size():
+            region = self.view.sel()[0]
+        else:
+            region = self.full_docstring_region()
+
         source = self.view.substr(region)
-        leading_whitespace = re.search(r'^\s+', source).group(0)
-        paragraph_width = LINE_LENGTH - len(leading_whitespace)
+        whitespace = re.search(r'^\s+', source).group(0)
+        first_line = ''.join([whitespace, '"""'])
 
         paragraphs = self.paragraphs(re.sub(r'"""|\'\'\'', '', source))
-        paragraphs[0][0] = '"""' + paragraphs[0][0]
-        if len(paragraphs) == 1:
-            paragraphs[0][-1] += '"""'
-        else:
-            while not paragraphs[-1]:
-                paragraphs.pop(-1)
-            paragraphs += [[], ['"""']]
+        while not paragraphs[-1]:
+            paragraphs.pop(-1)
+        paragraphs += [[], ['"""']]
 
         buf = ''
-        for para in paragraphs:
+        for idx, para in enumerate(paragraphs):
             if not para:
                 buf += '\n\n'
             else:
-                lines = textwrap.wrap(' '.join(para), width=paragraph_width)
-                buf += '\n'.join(
-                    [leading_whitespace + l for l in lines]
+                buf += textwrap.fill(
+                    ' '.join(para),
+                    width=LINE_LENGTH,
+                    initial_indent=first_line if idx == 0 else whitespace,
+                    subsequent_indent=whitespace
                 )
 
         return region, buf
@@ -107,17 +105,21 @@ class ReformatPyCommentCommand(BaseCommand):
             self.view.substr(self.view.lines(region)[0])
         ).group(1)
 
-        lines = COMMENT_REX.sub('', self.view.substr(region)).splitlines()
-        joined = ' '.join([l.strip() for l in lines if l.strip()])
+        source = COMMENT_REX.sub('', self.view.substr(region))
+        paragraphs = self.paragraphs(source)
+        line_start = ''.join([leading_whitespace, '# '])
 
-        line_start = ''.join([leading_whitespace, '#'])
-        buf = line_start
-        for word in [w for w in joined.split(' ') if w]:
-            current_line = buf.splitlines()[-1]
-            if len(current_line) + len(word) + 1 <= LINE_LENGTH:
-                buf += ''.join([' ', word])
+        buf = ''
+        for para in paragraphs:
+            if not para:
+                buf += '\n\n'
             else:
-                buf += ''.join(['\n', line_start, ' ', word])
+                buf += textwrap.fill(
+                    ' '.join(para),
+                    width=LINE_LENGTH,
+                    initial_indent=line_start,
+                    subsequent_indent=line_start
+                )
 
         return region, buf
 
@@ -151,6 +153,7 @@ class ReformatPyCommentCommand(BaseCommand):
         return self.expand_cursor_region(COMMENT_REX)
 
     def full_docstring_region(self):
+
         region = self.full_region_by_selector(DOCSTRING_SELECTOR)
         print('region: {0}'.format(region))
         lines = self.view.lines(region)
