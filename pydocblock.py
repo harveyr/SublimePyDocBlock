@@ -10,6 +10,8 @@ COMMENT_SELECTOR = 'comment.line.number-sign.python'
 
 COMMENT_REX = re.compile(r'^(\s*)(#|##)', re.MULTILINE)
 DOCSTRING_START_REX = re.compile(r'^(\s*)"""|\'\'\'', re.MULTILINE)
+FUNC_DEF_REX = re.compile(r'^\s*def [_\w]+\((.+)\):')
+WHITESPACE_REX = re.compile(r'^\s+', re.MULTILINE)
 
 LINE_LENGTH = 79
 
@@ -18,6 +20,10 @@ class BaseCommand(sublime_plugin.TextCommand):
     @property
     def sel_start(self):
         return self.view.sel()[0].a
+
+    @property
+    def current_line(self):
+        return self.view.line(self.sel_start)
 
     @property
     def current_scope(self):
@@ -34,41 +40,55 @@ class BaseCommand(sublime_plugin.TextCommand):
             COMMENT_REX.match(self.view.substr(self.view.line(self.sel_start)))
         )
 
-
-class ReformatPyCommentCommand(BaseCommand):
-    def run(self, edit):
-        if self.in_docstring:
-            replace_region, replace_str = self.reformat_docstring()
-        elif self.in_comment:
-            replace_region, replace_str = self.reformat_comment()
+    def next_line(self, region, direction):
+        if direction == 'backward':
+            return self.view.line(region.begin() - 1)
+        elif direction == 'forward':
+            return self.view.line(region.end() + 1)
         else:
-            raise RuntimeError(
-                'Inoperable scope: {}'.format(self.current_scope)
+            raise RuntimeError('Unexpected direction: {}'.format(direction))
+
+    def format_sphinx_paragraph(self, paragraph, indent):
+        sections = [[]]
+        for word in paragraph:
+            if word[0] == ':' and sections[-1]:
+                sections.append([])
+            sections[-1].append(word)
+
+        buf = ''
+        section_count = len(sections)
+        for idx, section in enumerate(sections):
+            start = ' '.join(section[:2])
+            rest = section[2:]
+            extra_ident = ' '.join(['' for _ in range(len(start) + 2)])
+            buf += textwrap.fill(
+                ' '.join(rest),
+                width=LINE_LENGTH,
+                initial_indent=''.join([indent, start, ' ']),
+                subsequent_indent=indent + extra_ident
             )
-        self.view.replace(edit, replace_region, replace_str)
+            if idx < section_count - 1:
+                buf += '\n'
 
-    def paragraphs(self, source):
-        paragraphs = [[]]
-        for line in source.splitlines():
-            line_words = [w for w in line.split(' ') if w]
-            if not line_words and paragraphs[-1]:
-                paragraphs += [[]]
-            else:
-                paragraphs[-1] += line_words
-
-        return paragraphs
+        return buf
 
     def reformat_docstring(self):
         """
 
         Reformats doctring.
-    
+
         This docstring doesn't look so good.
 
         Here is some more text that will help me test stuff because testing stuff is important and stuff.
 
         And here's another paragraph asdf asd fa sdf asdf asd fas dfas dfsa df
-        asf asdf pineapple"""
+        asf asdf pineapple
+
+        :param self: Normally we wouldn't do this but we're sorta testing some stuffs out
+        Here is the next line of the self thing.
+        :type self: blah asdf
+
+        """
         if self.view.sel()[0].size():
             region = self.view.sel()[0]
         else:
@@ -85,12 +105,18 @@ class ReformatPyCommentCommand(BaseCommand):
 
         buf = ''
         for idx, para in enumerate(paragraphs):
-            para_text = textwrap.fill(
-                ' '.join(para),
-                width=LINE_LENGTH,
-                initial_indent=first_line if idx == 0 else whitespace,
-                subsequent_indent=whitespace
-            )
+            if para[0][0] == ':':
+                para_text = self.format_sphinx_paragraph(
+                    para,
+                    indent=whitespace
+                )
+            else:
+                para_text = textwrap.fill(
+                    ' '.join(para),
+                    width=LINE_LENGTH,
+                    initial_indent=first_line if idx == 0 else whitespace,
+                    subsequent_indent=whitespace
+                )
             buf += '\n'.join([para_text, '\n'])
 
         return region, buf.rstrip()
@@ -110,25 +136,30 @@ class ReformatPyCommentCommand(BaseCommand):
 
         buf = ''
         for para in paragraphs:
-            if not para:
-                buf += '\n\n'
+            para_text = textwrap.fill(
+                ' '.join(para),
+                width=LINE_LENGTH,
+                initial_indent=line_start,
+                subsequent_indent=line_start
+            )
+            buf += '\n'.join([para_text, '\n'])
+
+        return region, buf.rstrip()
+
+    # This is a funky comment. Supa fly funky style. Because with comments like these, who needs comments?
+    # Here's some more.
+    # The other thing is that things.
+
+    def paragraphs(self, source):
+        paragraphs = [[]]
+        for line in source.splitlines():
+            line_words = [w for w in line.split(' ') if w]
+            if not line_words and paragraphs[-1]:
+                paragraphs += [[]]
             else:
-                buf += textwrap.fill(
-                    ' '.join(para),
-                    width=LINE_LENGTH,
-                    initial_indent=line_start,
-                    subsequent_indent=line_start
-                )
+                paragraphs[-1] += line_words
 
-        return region, buf
-
-    def next_line(self, region, direction):
-        if direction == 'backward':
-            return self.view.line(region.begin() - 1)
-        elif direction == 'forward':
-            return self.view.line(region.end() + 1)
-        else:
-            raise RuntimeError('Unexpected direction: {}'.format(direction))
+        return paragraphs
 
     def expanded_region_by_rex(self, region, rex, direction):
         expanded_region = sublime.Region(region.a, region.b)
@@ -163,3 +194,78 @@ class ReformatPyCommentCommand(BaseCommand):
             if region.contains(cursor):
                 return region
         return None
+
+    def split_docstring(self, docstring):
+        intro = []
+        sphinx = []
+        for l in docstring.splitlines():
+            if l[0] == ':':
+                sphinx.append(l)
+            else:
+                intro.append(l)
+        return '\n'.join(intro), '\n'.join(sphinx)
+
+    def whitespace(self, line=None, region=None):
+        if not any([line, region]):
+            raise ValueError('Must provide line or region')
+        if region:
+            line = self.view.substr(region).splitlines()[0]
+        match = WHITESPACE_REX.search(line)
+        if match:
+            return match.group(0)
+        return None
+
+
+class GenerateSphinxDocstringCommand(BaseCommand):
+    """WIP"""
+    def run(self, edit):
+        func_args = self.find_func_args()
+        docstring_region = self.full_docstring_region()
+        whitespace = self.whitespace(region=docstring_region)
+        docs = self.spinx_docs(func_args, whitespace=whitespace)
+        self.view.insert(edit, self.sel_start, docs)
+
+    def spinx_docs(self, args, whitespace='    '):
+        p_template = ':param {0}: \n:type {0}: '
+        sections = (
+            [p_template.format(a) for a in args] +
+            [':return: description\n:rtype: ']
+        )
+        text = '\n'.join(sections)
+        return '\n'.join(
+            [(whitespace + l) for l in text.splitlines()]
+        )
+
+    def find_func_args(self, bingo='Flase', tester=None):
+        test_line = self.current_line
+        args = []
+        while True:
+            line_text = self.view.substr(test_line)
+            match = FUNC_DEF_REX.match(line_text)
+            if match:
+                args = [a.strip() for a in match.group(1).split(',') if a]
+                break
+            if test_line.begin() == 0:
+                raise RuntimeError('No func definition found!')
+            test_line = self.next_line(test_line, 'backward')
+
+        if args:
+            args = [a.split('=')[0] for a in args]
+
+        if 'self' in args:
+            args.pop(args.index('self'))
+
+        return args
+
+
+class ReformatPyCommentCommand(BaseCommand):
+    def run(self, edit):
+        if self.in_docstring:
+            replace_region, replace_str = self.reformat_docstring()
+        elif self.in_comment:
+            replace_region, replace_str = self.reformat_comment()
+        else:
+            raise RuntimeError(
+                'Inoperable scope: {}'.format(self.current_scope)
+            )
+        self.view.replace(edit, replace_region, replace_str)

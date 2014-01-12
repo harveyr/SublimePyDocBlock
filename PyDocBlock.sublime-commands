@@ -1,6 +1,10 @@
 [
     {
-        "caption": "PyDocBlock: Reformat",
+        "caption": "PyDoc: Reformat",
         "command": "reformat_py_comment"
-    }
+    },
+    {
+        "caption": "PyDoc: Generate Sphinx Docstring",
+        "command": "generate_sphinx_docstring"
+    },
 ]
