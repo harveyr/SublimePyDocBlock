@@ -153,12 +153,8 @@ class ReformatPyCommentCommand(BaseCommand):
         return self.expand_cursor_region(COMMENT_REX)
 
     def full_docstring_region(self):
-
         region = self.full_region_by_selector(DOCSTRING_SELECTOR)
-        print('region: {0}'.format(region))
         lines = self.view.lines(region)
-        print('lines: {0}'.format(lines))
-
         return region.cover(self.view.line(lines[0].begin()))
 
     def full_region_by_selector(self, selector):
