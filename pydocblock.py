@@ -49,6 +49,13 @@ class BaseCommand(sublime_plugin.TextCommand):
             raise RuntimeError('Unexpected direction: {}'.format(direction))
 
     def format_sphinx_paragraph(self, paragraph, indent):
+        """Returns formatted text for a sphinx paragraph.
+
+        :param list paragraph: List of words in the sphinx doc section (including param, type).
+        :param str indent: Whitespace indent.
+        :return: Formatted text super long asd fasdf amdf asdflkasdfl kasdflk adlskf a.
+
+        """
         sections = [[]]
         for word in paragraph:
             if word[0] == ':' and sections[-1]:
@@ -58,8 +65,11 @@ class BaseCommand(sublime_plugin.TextCommand):
         buf = ''
         section_count = len(sections)
         for idx, section in enumerate(sections):
-            start = ' '.join(section[:2])
-            rest = section[2:]
+            start_words = [section[0]]
+            while start_words[-1][-1] != ':':
+                start_words.append(section[len(start_words)])
+            start = ' '.join(start_words)
+            rest = section[len(start_words):]
             extra_ident = ' '.join(['' for _ in range(len(start) + 2)])
             buf += textwrap.fill(
                 ' '.join(rest),
