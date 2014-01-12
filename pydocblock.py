@@ -62,9 +62,16 @@ class ReformatPyCommentCommand(BaseCommand):
     def reformat_docstring(self):
         """Reformats doctring.
 
-        Here is some more text that will help me test stuff because testing stuff is important and stuff.
+        Here is some more text that will help me test stuff because testing
+        stuff is important and stuff.
 
-        And here's another paragraph."""
+        And here's another paragraph.
+
+
+
+
+
+        """
         region = self.full_docstring_region()
         source = self.view.substr(region)
         leading_whitespace = re.search(r'^\s+', source).group(0)
@@ -75,11 +82,12 @@ class ReformatPyCommentCommand(BaseCommand):
         if len(paragraphs) == 1:
             paragraphs[0][-1] += '"""'
         else:
+            while not paragraphs[-1]:
+                paragraphs.pop(-1)
             paragraphs += [[], ['"""']]
 
         buf = ''
         for para in paragraphs:
-            print('para: {0}'.format(para))
             if not para:
                 buf += '\n\n'
             else:
@@ -87,7 +95,6 @@ class ReformatPyCommentCommand(BaseCommand):
                 buf += '\n'.join(
                     [leading_whitespace + l for l in lines]
                 )
-        print('buf: {0}'.format(buf))
 
         return region, buf
 
