@@ -86,20 +86,19 @@ class BaseCommand(sublime_plugin.TextCommand):
         return buf
 
     def reformat_docstring(self):
-        """
+        """Reformats doctring.
 
-        Reformats doctring.
-
-        This docstring doesn't look so good.
+        This docstring doesn't look so good but is useful for testing this plugin.
 
         Here is some more text that will help me test stuff because testing stuff is important and stuff.
 
-        And here's another paragraph asdf asd fa sdf asdf asd fas dfas dfsa df
+        And here's another paragraph asdf asd fa sdf asdf asd fas dfas dfsa df asd fa sdf kadsflakf 
         asf asdf pineapple
 
-        :param self: Normally we wouldn't do this but we're sorta testing some stuffs out
-        Here is the next line of the self thing.
+        :param self: Normally we wouldn't document 'self' but we're sorta testing some
+                     stuffs out Here is the next line of the self thing.
         :type self: blah asdf
+        :return: str
 
         """
         if self.view.sel()[0].size():

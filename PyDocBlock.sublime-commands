@@ -1,6 +1,6 @@
 [
     {
-        "caption": "PyDoc: Reformat",
+        "caption": "PyDoc: Reformat Comment or Docstring",
         "command": "reformat_py_comment"
     },
     {
