@@ -12,6 +12,7 @@ COMMENT_REX = re.compile(r'^(\s*)(#|##)', re.MULTILINE)
 DOCSTRING_START_REX = re.compile(r'^(\s*)"""|\'\'\'', re.MULTILINE)
 FUNC_DEF_REX = re.compile(r'^\s*def [_\w]+\((.+)\):')
 WHITESPACE_REX = re.compile(r'^\s+', re.MULTILINE)
+RAISES_REX = re.compile(r'raise (\w+)\b')
 
 LINE_LENGTH = 79
 
@@ -51,9 +52,11 @@ class BaseCommand(sublime_plugin.TextCommand):
     def format_sphinx_paragraph(self, paragraph, indent):
         """Returns formatted text for a sphinx paragraph.
 
-        :param list paragraph: List of words in the sphinx doc section (including param, type).
+        :param list paragraph: List of words in the sphinx doc section
+                               (including param, type).
         :param str indent: Whitespace indent.
-        :return: Formatted text super long asd fasdf amdf asdflkasdfl kasdflk adlskf a.
+        :return: Formatted text super long asd fasdf amdf asdflkasdfl kasdflk
+                 adlskf a.
 
         """
         sections = [[]]
@@ -225,6 +228,24 @@ class BaseCommand(sublime_plugin.TextCommand):
             return match.group(0)
         return None
 
+    def full_function_region(self, region=None):
+        region = region or self.current_line
+        start_line = self.view.line(region.begin())
+        while not FUNC_DEF_REX.match(self.view.substr(start_line)):
+            start_line = self.next_line(start_line, 'backward')
+
+        end_line = self.next_line(start_line, 'forward')
+        while (
+            not FUNC_DEF_REX.match(self.view.substr(end_line)) and
+            end_line.end() < self.view.size() - 1
+        ):
+            end_line = self.next_line(end_line, 'forward')
+
+        return start_line.cover(end_line)
+
+    def find_raises(self, region):
+        return RAISES_REX.findall(self.view.substr(region))
+
 
 class GenerateSphinxDocstringCommand(BaseCommand):
     """WIP"""
@@ -232,14 +253,20 @@ class GenerateSphinxDocstringCommand(BaseCommand):
         func_args = self.find_func_args()
         docstring_region = self.full_docstring_region()
         whitespace = self.whitespace(region=docstring_region)
-        docs = self.spinx_docs(func_args, whitespace=whitespace)
+        docs = self.spinx_docs(
+            func_args,
+            exceptions=self.find_raises(self.full_function_region()),
+            whitespace=whitespace
+        )
         self.view.insert(edit, self.sel_start, docs)
 
-    def spinx_docs(self, args, whitespace='    '):
+    def spinx_docs(self, args, exceptions, whitespace):
         p_template = ':param {0}: \n:type {0}: '
+        exceptions_template = ':raises {}: '
         sections = (
             [p_template.format(a) for a in args] +
-            [':return: description\n:rtype: ']
+            [':return: description\n:rtype: '] +
+            [exceptions_template.format(e) for e in exceptions]
         )
         text = '\n'.join(sections)
         return '\n'.join(
@@ -247,6 +274,9 @@ class GenerateSphinxDocstringCommand(BaseCommand):
         )
 
     def find_func_args(self, bingo='Flase', tester=None):
+        """
+
+        """
         test_line = self.current_line
         args = []
         while True:
